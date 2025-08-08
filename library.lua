@@ -1,7 +1,8 @@
 local library = {}
 local _G = getgenv()
-_G.library = library
+_G.library = library -- For backward compatibility
 
+--aaa
 local uis = game:GetService("UserInputService")
 local players = game:GetService("Players")
 local ws = game:GetService("Workspace")
@@ -39,6 +40,7 @@ local floor = math.floor
 local min = math.min 
 local abs = math.abs 
 
+-- Create local library table first
 local library = {
     flags = {},
     config_flags = {},
@@ -62,6 +64,7 @@ local library = {
     font = nil, 
 }
 
+-- Then assign to getgenv().library
 getgenv().library = library
 
     local flags = library.flags
