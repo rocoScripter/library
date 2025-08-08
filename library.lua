@@ -347,120 +347,147 @@ getgenv().library = library
             :gsub(library.directory .. "/configs/", "")
             :gsub(".cfg", "")
         list[#list + 1] = name;
-    end;
 
-    library.config_holder:refresh_options(list)
-end 
+                table.insert(library.instances, ins)
 
-function library:get_config()
-    local Config = {}
-    
-    -- First, save all keybinds
-    for flagName, flagValue in pairs(flags) do
-        if type(flagValue) == "table" and flagValue.key ~= nil and flagValue.key ~= Enum.KeyCode.Unknown and tostring(flagValue.key) ~= "..." then
-        Config[flagName] = {
-        _type = "keybind",
-        key = tostring(flagValue.key),
-        mode = flagValue.mode or "toggle",
-        active = flagValue.active or false
-    }
-end
-    end
-    
-    -- Then save other flags
-    for flagName, flagValue in pairs(flags) do
-        if (type(flagValue) ~= "table" or flagValue.key == nil) and not Config[flagName] then
-            if type(flagValue) == "table" then
+                return ins 
+            end 
+            
+            function library:animation(text) 
+                local pattern = {} for i = 1, tonumber(text:len()) do table.insert(pattern, string.sub(text, 1, i)) end for i = tonumber(text:len()) - 1, 0, -1 do table.insert(pattern, string.sub(text, 1, i)) end return pattern 
+            end 
+
+            function library:convert_enum(enum)
+                local enum_parts = {}
+            
+                for part in string.gmatch(enum, "[%w_]+") do
+                    table.insert(enum_parts, part)
+                end
+            
+                local enum_table = Enum
+                for i = 2, #enum_parts do
+                    local enum_item = enum_table[enum_parts[i]]
+            
+                    enum_table = enum_item
+                end
+            
+                return enum_table
+            end
+            
+            function library:config_list_update() 
+        if not library.config_holder then return end; 
+
+        local list = {};
+
+        for idx, file in next, listfiles(library.directory .. "/configs") do
+            local name = file
+                :gsub(library.directory .. "/configs\\", "")
+                :gsub(library.directory .. "\\configs\\", "")
+                :gsub(library.directory .. "/configs/", "")
+                :gsub(".cfg", "")
+            list[#list + 1] = name;
+        end;
+
+        library.config_holder:refresh_options(list)
+    end 
+
+    function library:get_config()
+        local Config = {}
+        
+        -- Save all flags including keybinds
+        for flagName, flagValue in pairs(flags) do
+            -- Handle keybinds
+            if type(flagValue) == "table" and flagValue.key ~= nil then
+                -- Skip invalid keybinds
+                if flagValue.key == Enum.KeyCode.Unknown or tostring(flagValue.key) == "..." then
+                    goto continue
+                end
+                
+                -- Save keybind data
+                Config[flagName] = {
+                    _type = "keybind",
+                    key = tostring(flagValue.key),
+                    mode = flagValue.mode or "toggle",
+                    active = flagValue.active or false
+                }
+            -- Handle other table values
+            elseif type(flagValue) == "table" then
                 local serialized = {}
                 for k, v in pairs(flagValue) do
-                    if type(v) ~= "function" and k ~= "__index" then
+                    if type(v) ~= "function" and k ~= "__index" and k ~= "_type" then
                         serialized[k] = v
                     end
                 end
                 if next(serialized) ~= nil then
                     Config[flagName] = serialized
                 end
+            -- Handle simple values
             else
                 Config[flagName] = flagValue
             end
+            
+            ::continue::
         end
+        
+        return Config
     end
     
-    -- Save UI state
-    if self.cfg then
-        Config["__ui_state"] = {
-            show_keybind_list = self.cfg.show_keybind_list,
-            show_playerlist = self.cfg.show_playerlist,
-            show_watermark = self.cfg.show_watermark
-        }
-    end
-    
-    return http_service:JSONEncode(Config)
-end
-
-function library:load_config(config_json, noEnable)
-    local success, config = pcall(http_service.JSONDecode, http_service, config_json)
-    if not success then
-        library:notification({text = "Failed to parse config"})
-        return
-    end
-
-    -- First pass: Load keybinds
-    for flagName, value in pairs(config) do
-        if type(value) == "table" and value._type == "keybind" and value.key and value.key ~= "..." then
-            print("Loading keybind:", flagName, "Key:", value.key, "Active:", value.active)
-            
-            -- Get or create the keybind flag
-            local flag = flags[flagName]
-            if not flag then
-                flag = {
-                    _type = "keybind",
-                    callback = function() end, -- Default callback if none exists
-                    key = Enum.KeyCode.Unknown,
-                    mode = "toggle",
-                    active = false
-                }
-                flags[flagName] = flag
-            end
-            
-            -- Convert string key back to Enum if needed
-            local keyValue = value.key
-            if type(keyValue) == "string" and keyValue:find("Enum%.") then
-                local success, result = pcall(loadstring("return " .. keyValue))
-                if success and typeof(result) == "EnumItem" then
-                    keyValue = result
+    function library:load_config(config, noEnable)
+        -- First pass: Load keybinds
+        for flagName, value in pairs(config) do
+            if type(value) == "table" and value._type == "keybind" then
+                -- Find or create the flag
+                local flag = flags[flagName]
+                if not flag then
+                    flag = {
+                        _type = "keybind",
+                        callback = function() end, -- Default callback if none exists
+                        key = Enum.KeyCode.Unknown,
+                        mode = "toggle",
+                        active = false
+                    }
+                    flags[flagName] = flag
                 end
-            end
-            
-            -- Update the keybind properties
-            flag.key = keyValue ~= "..." and keyValue or Enum.KeyCode.Unknown
-            flag.mode = value.mode or "toggle"
-            flag.active = value.active or false
-            
-            -- Update the flags table to stay in sync
-            if flags[flagName] then
-                flags[flagName].key = flag.key
-                flags[flagName].mode = flag.mode
-                flags[flagName].active = flag.active
-            end
-            
-            -- Force update the UI if the keybind has an update function
-            if flag.update then
-                pcall(flag.update)
-            end
-            
-            -- Update the config flags
-            if library.config_flags[flagName] then
-                if type(library.config_flags[flagName]) == "table" and library.config_flags[flagName].set then
-                    pcall(function()
-                        library.config_flags[flagName].set(flag.active, flag.mode, flag.key)
-                    end)
+                
+                -- Convert string key back to Enum if needed
+                local keyValue = value.key
+                if type(keyValue) == "string" and keyValue:find("Enum%\.") then
+                    local success, result = pcall(loadstring("return " .. keyValue))
+                    if success and typeof(result) == "EnumItem" then
+                        keyValue = result
+                    end
                 end
-            end
-            
-            -- Trigger the callback if it exists
-            if flag.callback then
-                pcall(flag.callback, keyValue)
+                
+                -- Update the keybind properties
+                flag.key = keyValue ~= "..." and keyValue or Enum.KeyCode.Unknown
+                flag.mode = value.mode or "toggle"
+                flag.active = value.active or false
+                
+                -- Update the flags table to stay in sync
+                if flags[flagName] then
+                    flags[flagName].key = flag.key
+                    flags[flagName].mode = flag.mode
+                    flags[flagName].active = flag.active
+                end
+                
+                -- Force update the UI if the keybind has an update function
+                if flag.update then
+                    pcall(flag.update)
+                end
+                
+                -- Update the config flags
+                if library.config_flags[flagName] then
+                    if type(library.config_flags[flagName]) == "table" and library.config_flags[flagName].set then
+                        pcall(function()
+                            library.config_flags[flagName].set(flag.active, flag.mode, flag.key)
+                        end)
+                    end
+                end
+                
+                -- Trigger the callback if it exists
+                if flag.callback then
+                    pcall(flag.callback, keyValue)
+                end
             end
         end
     end
