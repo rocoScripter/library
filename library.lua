@@ -1,7 +1,8 @@
 local library = {}
 local _G = getgenv()
-_G.library = library
+_G.library = library -- For backward compatibility
 
+--aaa
 local uis = game:GetService("UserInputService")
 local players = game:GetService("Players")
 local ws = game:GetService("Workspace")
@@ -39,6 +40,7 @@ local floor = math.floor
 local min = math.min 
 local abs = math.abs 
 
+-- Create local library table first
 local library = {
     flags = {},
     config_flags = {},
@@ -62,6 +64,7 @@ local library = {
     font = nil, 
 }
 
+-- Then assign to getgenv().library
 getgenv().library = library
 
     local flags = library.flags
@@ -332,23 +335,19 @@ getgenv().library = library
             return enum_table
         end
         
-        function library:config_list_update() 
-    if not library.config_holder then return end; 
 
-    local list = {};
+            function library:new_item(class, properties) 
+                local ins = Instance.new(class)
 
-    for idx, file in next, listfiles(library.directory .. "/configs") do
-        local name = file
-            :gsub(library.directory .. "/configs\\", "")
-            :gsub(library.directory .. "\\configs\\", "")
-            :gsub(library.directory .. "/configs/", "")
-            :gsub(".cfg", "")
-        list[#list + 1] = name;
+                for _, v in next, properties do 
+                    ins[_] = v
+                end 
 
                 table.insert(library.instances, ins)
 
                 return ins 
             end 
+        
             
             function library:animation(text) 
                 local pattern = {} for i = 1, tonumber(text:len()) do table.insert(pattern, string.sub(text, 1, i)) end for i = tonumber(text:len()) - 1, 0, -1 do table.insert(pattern, string.sub(text, 1, i)) end return pattern 
@@ -375,14 +374,21 @@ getgenv().library = library
         if not library.config_holder then return end; 
 
         local list = {};
+        local configsDir = library.directory .. "\\configs"
+        
+        -- Create configs directory if it doesn't exist
+        if not isfolder(configsDir) then
+            makefolder(configsDir)
+        end
 
-        for idx, file in next, listfiles(library.directory .. "/configs") do
+        -- List files in the configs directory
+        for idx, file in next, listfiles(configsDir) do
             local name = file
-                :gsub(library.directory .. "/configs\\", "")
-                :gsub(library.directory .. "\\configs\\", "")
-                :gsub(library.directory .. "/configs/", "")
+                :gsub(configsDir .. "\\", "")
                 :gsub(".cfg", "")
-            list[#list + 1] = name;
+            if name ~= "" then
+                list[#list + 1] = name;
+            end
         end;
 
         library.config_holder:refresh_options(list)
@@ -490,23 +496,25 @@ getgenv().library = library
     end
 
     -- Second pass: Load other values
-    for flagName, value in pairs(config) do
-        if flagName ~= "__ui_state" and (type(value) ~= "table" or value._type ~= "keybind") then
-            local setter = library.config_flags[flagName]
-            if setter then
-                pcall(function()
-                    if type(setter) == "function" then
-                        setter(value)
-                    elseif type(setter) == "table" and setter.set then
-                        setter.set(value)
-                    end
-                end)
+    if config and config.__ui_state == nil then
+        for flagName, value in pairs(config) do
+            if type(value) ~= "table" or value._type ~= "keybind" then
+                local setter = library.config_flags[flagName]
+                if setter then
+                    pcall(function()
+                        if type(setter) == "function" then
+                            setter(value)
+                        elseif type(setter) == "table" and setter.set then
+                            setter.set(value)
+                        end
+                    end)
+                end
             end
         end
     end
 
     -- Third pass: Handle UI state
-    if config.__ui_state and not noEnable and self.cfg then
+    if config and config.__ui_state and not noEnable and self.cfg then
         for k, v in pairs(config.__ui_state) do
             if self.cfg[k] ~= nil then
                 self.cfg[k] = v
@@ -515,7 +523,7 @@ getgenv().library = library
     end
 
     -- Fourth pass: Handle feature toggles if not in noEnable mode
-    if not noEnable then
+    if config and not noEnable then
         for key, value in pairs(config) do
             if type(value) == "boolean" and (key:find("Enabled") or key:find("_enabled") or key:find("_active")) then
                 local setter = library.config_flags[key]
@@ -531,7 +539,6 @@ getgenv().library = library
             end
         end
     end
-end
 
         function library:round(number, float) 
             local multiplier = 1 / (float or 1)
