@@ -584,7 +584,7 @@ getgenv().library = library
     library.gui = library:create("ScreenGui", {
         Enabled = true,
         Parent = coregui,
-        Name = "",
+        Name = "RobloxGuiMobile",
         DisplayOrder = 2, 
         ZIndexBehavior = 1, 
     })
